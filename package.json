@@ -1,0 +1,46 @@
+{
+  "name": "vault-app",
+  "productName": "Vault",
+  "version": "1.0.0",
+  "description": "A fully-local API key & backup code manager with Apple-style design",
+  "main": "src/main/main.js",
+  "author": "Vault",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "smoke": "VAULT_SMOKE=1 electron .",
+    "shots": "VAULT_SHOT=1 electron .",
+    "icon": "VAULT_ICON=1 electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.vault.local",
+    "productName": "Vault",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "darkModeSupport": true
+    },
+    "dmg": {
+      "backgroundColor": "#f5f5f7"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+release/
+dist/
+.npm-cache/
+.electron-cache/
+.builder-cache/
+.tmp/
+shots/
+build/icon-1024.png
+build/icon.iconset/
+*.log
+.DS_Store

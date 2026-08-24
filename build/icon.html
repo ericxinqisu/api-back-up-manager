@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<style>
+  html, body { margin: 0; padding: 0; width: 1024px; height: 1024px; background: transparent; overflow: hidden; }
+  canvas { width: 1024px; height: 1024px; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1024" height="1024"></canvas>
+<script>
+  const c = document.getElementById('c');
+  const ctx = c.getContext('2d');
+
+  // Rounded-square background with an Apple-style blue gradient
+  const size = 1024;
+  const radius = 228;
+  const grad = ctx.createLinearGradient(0, 0, 0, size);
+  grad.addColorStop(0, '#57B1FF');
+  grad.addColorStop(0.55, '#0A84FF');
+  grad.addColorStop(1, '#0060D6');
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, radius);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Subtle top highlight
+  const hl = ctx.createLinearGradient(0, 0, 0, size * 0.55);
+  hl.addColorStop(0, 'rgba(255,255,255,0.28)');
+  hl.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, radius);
+  ctx.fillStyle = hl;
+  ctx.fill();
+
+  // Soft shadow under the glyph
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,40,90,0.45)';
+  ctx.shadowBlur = 48;
+  ctx.shadowOffsetY = 26;
+
+  // Shield glyph (white, SF-Symbols style)
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 66;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(512, 190);
+  ctx.lineTo(742, 268);
+  ctx.lineTo(742, 508);
+  ctx.bezierCurveTo(742, 676, 646, 806, 512, 862);
+  ctx.bezierCurveTo(378, 806, 282, 676, 282, 508);
+  ctx.lineTo(282, 268);
+  ctx.closePath();
+  ctx.stroke();
+
+  // Checkmark
+  ctx.beginPath();
+  ctx.moveTo(386, 512);
+  ctx.lineTo(478, 604);
+  ctx.lineTo(648, 416);
+  ctx.stroke();
+  ctx.restore();
+</script>
+</body>
+</html>

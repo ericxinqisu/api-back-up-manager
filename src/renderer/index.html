@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+  />
+  <title>Vault</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ===================== LOCK SCREEN ===================== -->
+  <div id="screen-lock" class="screen lock-screen hidden">
+    <div class="lock-card">
+      <div class="lock-icon" id="lock-icon" data-icon="shield" style="width:30px;height:30px"></div>
+      <h1 id="lock-title">Vault</h1>
+      <p id="lock-subtitle">Enter your master password to continue</p>
+      <form id="lock-form" novalidate>
+        <input
+          id="lock-password"
+          type="password"
+          class="text-input lock-input"
+          placeholder="Master password"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+        <input
+          id="lock-confirm"
+          type="password"
+          class="text-input lock-input hidden"
+          placeholder="Confirm master password"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+        <p id="lock-hint" class="lock-hint hidden">At least 8 characters. There is no recovery — keep it safe.</p>
+        <p id="lock-error" class="lock-error hidden" role="alert"></p>
+        <button id="lock-button" type="submit" class="btn primary lock-button">Unlock</button>
+      </form>
+    </div>
+    <p class="lock-foot">100% local &middot; your data never leaves this Mac</p>
+  </div>
+
+  <!-- ===================== MAIN SCREEN ===================== -->
+  <div id="screen-main" class="screen main-screen hidden">
+    <header id="toolbar">
+      <div class="toolbar-title">Vault</div>
+      <div class="search-wrap">
+        <span class="search-icon" data-icon="search"></span>
+        <input id="search" type="search" placeholder="Search" autocomplete="off" spellcheck="false" />
+        <kbd class="search-kbd">&#8984;F</kbd>
+      </div>
+      <div class="toolbar-actions">
+        <button id="btn-new" class="icon-btn" title="New item (&#8984;N)" data-icon="plus"></button>
+        <button id="btn-settings" class="icon-btn" title="Settings" data-icon="gear"></button>
+      </div>
+    </header>
+
+    <div class="main-body">
+      <!-- Sidebar -->
+      <aside id="sidebar">
+        <nav>
+          <div class="nav-section-label">Library</div>
+          <button class="nav-row" data-filter="all"></button>
+          <button class="nav-row" data-filter="apikeys"></button>
+          <button class="nav-row" data-filter="backupcodes"></button>
+          <button class="nav-row" data-filter="favorites"></button>
+
+          <div class="nav-section-label nav-tags-label">
+            <span>Tags</span>
+            <button id="btn-add-tag" class="mini-btn" title="New tag" data-icon="plus"></button>
+          </div>
+          <div id="tag-list"></div>
+          <div id="tag-input-wrap" class="tag-input-wrap hidden">
+            <input id="tag-input" class="text-input tag-input" type="text" placeholder="Tag name" spellcheck="false" />
+          </div>
+        </nav>
+
+        <footer class="sidebar-footer">
+          <button id="btn-export" class="foot-btn"><span data-icon="export"></span><span class="foot-label">Export</span></button>
+          <button id="btn-import" class="foot-btn"><span data-icon="import"></span><span class="foot-label">Import</span></button>
+          <button id="btn-lock" class="foot-btn lock-btn"><span data-icon="lock"></span><span class="foot-label">Lock</span></button>
+        </footer>
+      </aside>
+
+      <!-- List -->
+      <section id="list-pane">
+        <div class="list-header">
+          <span id="list-title">All Items</span>
+          <span id="list-count" class="list-count"></span>
+        </div>
+        <div id="item-list" class="item-list"></div>
+        <div id="empty-state" class="empty-state hidden">
+          <div class="empty-icon" data-icon="inbox"></div>
+          <p id="empty-title">No items</p>
+          <p id="empty-sub">Press &#8984;N or the + button to add one</p>
+        </div>
+      </section>
+
+      <!-- Detail -->
+      <section id="detail-pane">
+        <div id="detail-empty" class="detail-empty">
+          <div class="empty-icon" data-icon="selection"></div>
+          <p>Select an item</p>
+        </div>
+        <div id="detail" class="detail hidden"></div>
+      </section>
+    </div>
+
+    <!-- Settings popover -->
+    <div id="settings-pop" class="popover hidden">
+      <div class="pop-title">Settings</div>
+
+      <div class="pop-block">
+        <div class="pop-label">Auto-Lock</div>
+        <div class="segmented auto-lock" id="auto-lock-seg"></div>
+      </div>
+
+      <div class="pop-title pop-sub">Change Master Password</div>
+      <input id="cp-old" class="text-input pop-input" type="password" placeholder="Current password" autocomplete="off" />
+      <input id="cp-new" class="text-input pop-input" type="password" placeholder="New password (8+ characters)" autocomplete="off" />
+      <button id="cp-save" class="btn primary pop-btn">Change Password</button>
+      <p id="cp-error" class="pop-error hidden"></p>
+
+      <div class="pop-title pop-sub">Vault</div>
+      <button id="pop-export" class="btn secondary pop-btn">Export Backup&hellip;</button>
+      <button id="pop-import" class="btn secondary pop-btn">Import Backup&hellip;</button>
+
+      <p class="pop-about">Vault 1.0 &middot; Fully local &middot; AES-256-GCM</p>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast-wrap"></div>
+
+    <!-- Confirm dialog -->
+    <div id="confirm-backdrop" class="backdrop hidden">
+      <div class="modal confirm-modal">
+        <h2 id="confirm-title"></h2>
+        <p id="confirm-message"></p>
+        <div class="modal-footer">
+          <button id="confirm-cancel" class="btn secondary">Cancel</button>
+          <button id="confirm-ok" class="btn primary danger-solid">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Item editor -->
+    <div id="editor-backdrop" class="backdrop hidden">
+      <div class="modal editor-modal">
+        <h2 id="editor-title">New Item</h2>
+        <div class="editor-body" id="editor-body"></div>
+        <div class="modal-footer">
+          <button id="editor-cancel" class="btn secondary">Cancel</button>
+          <button id="editor-save" class="btn primary">Save</button>
+        </div>
+        <p id="editor-error" class="pop-error hidden"></p>
+      </div>
+    </div>
+
+    <!-- Context menu -->
+    <div id="context-menu" class="context-menu hidden"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
