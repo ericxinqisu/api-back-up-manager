@@ -16,6 +16,40 @@ if (process.env.VAULT_SMOKE || process.env.VAULT_SHOT || process.env.VAULT_CHECK
   app.setPath('userData', tmp);
 }
 
+// Touch ID self-test (diagnostics): launch with --touchid-self-test,
+// scan (or cancel) the system prompt, then read /tmp/vault-touchid-selftest.json.
+if (process.argv.includes('--touchid-self-test')) {
+  const fs = require('fs');
+  app.whenReady().then(async () => {
+    const out = {};
+    try {
+      out.canPrompt = systemPreferences.canPromptTouchID();
+    } catch (e) {
+      out.canPrompt = 'ERR: ' + String((e && e.message) || e);
+    }
+    try {
+      out.safeStorage = safeStorage.isEncryptionAvailable();
+    } catch (e) {
+      out.safeStorage = 'ERR: ' + String((e && e.message) || e);
+    }
+    try {
+      const res = await systemPreferences.promptTouchID('Self-test Touch ID for Vault');
+      // Electron 33 resolves with undefined on success, rejects on failure.
+      out.promptResult = res === undefined ? 'SUCCESS' : String(res);
+    } catch (e) {
+      out.promptResult = 'REJECTED';
+      out.promptError = String((e && e.message) || e);
+    }
+    out.finishedAt = Date.now();
+    try {
+      fs.writeFileSync('/tmp/vault-touchid-selftest.json', JSON.stringify(out, null, 2));
+    } catch (e) {
+      console.error('selftest write failed', e);
+    }
+    app.quit();
+  });
+}
+
 let win = null;
 let store = null;
 
@@ -276,27 +310,36 @@ function registerIpc() {
     if (!stored) {
       throw new Error('Unlock once with your password to enable Touch ID');
     }
-    let ok;
     if (process.env.VAULT_SMOKE_TOUCHID) {
       // Automated smoke test only: skip the real biometric prompt.
-      ok = true;
     } else {
+      // Note: Electron 33's promptTouchID resolves with `undefined` on
+      // success (Promise<void> + evaluateAccessControl) and REJECTS with
+      // the localized description on failure — so a resolution (even
+      // undefined) means the fingerprint matched. `false` is only
+      // tolerated for compatibility with other Electron versions.
+      let result;
       try {
-        ok = await systemPreferences.promptTouchID('Unlock Vault');
+        result = await systemPreferences.promptTouchID('Unlock Vault');
       } catch (err) {
         const detail = String((err && err.message) || err || '').toLowerCase();
-        if (detail.includes('locked out') || detail.includes('lockout')) {
+        if (detail.includes('lock')) {
           throw new Error(
             'Touch ID is locked out after repeated failed attempts — enter your Mac password when the system asks, then try again'
           );
         }
-        throw new Error('Touch ID was cancelled — unlock with your password');
+        if (detail.includes('cancel')) {
+          throw new Error('Touch ID was cancelled — unlock with your password');
+        }
+        throw new Error(
+          'Fingerprint not recognized — try again, or unlock with your password below'
+        );
       }
-    }
-    if (!ok) {
-      throw new Error(
-        'Fingerprint not recognized — try again, or unlock with your password below'
-      );
+      if (result === false) {
+        throw new Error(
+          'Fingerprint not recognized — try again, or unlock with your password below'
+        );
+      }
     }
     let key;
     try {

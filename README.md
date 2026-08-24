@@ -22,8 +22,8 @@ npm start
 
 ## Use the built app
 
-- `release/Vault-1.1.1-arm64.dmg` — double-click to open, drag Vault into `/Applications`.
-- `release/Vault-1.1.1-arm64-mac.zip` — distributable archive (unzip, drag to Applications).
+- `release/Vault-1.1.2-arm64.dmg` — double-click to open, drag Vault into `/Applications`.
+- `release/Vault-1.1.2-arm64-mac.zip` — distributable archive (unzip, drag to Applications).
 - `release/mac-arm64/Vault.app` — the unpacked app, ready to drag into `/Applications`.
 
 ## Build the app
