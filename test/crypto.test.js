@@ -35,4 +35,25 @@ try {
 }
 assert.ok(threw, 'tampered payload should throw');
 
+// Key-based round trip (used for Touch ID unlock and fast re-saves)
+const key = crypto.deriveKey('correct horse battery staple', Buffer.from(payload.salt, 'base64'));
+const outByKey = crypto.decryptVaultWithKey(payload, key);
+assert.strictEqual(outByKey, plaintext);
+
+// Re-save with the vault's original salt: key AND password must both still open it.
+const reencrypted = crypto.encryptVaultWithKey(plaintext, key, Buffer.from(payload.salt, 'base64'));
+const outReencrypted = crypto.decryptVaultWithKey(reencrypted, key);
+assert.strictEqual(outReencrypted, plaintext);
+const outByPassword = crypto.decryptVault(reencrypted, 'correct horse battery staple');
+assert.strictEqual(outByPassword, plaintext);
+
+// Wrong key must throw
+threw = false;
+try {
+  crypto.decryptVaultWithKey(payload, crypto.deriveKey('wrong password', Buffer.from(payload.salt, 'base64')));
+} catch (_) {
+  threw = true;
+}
+assert.ok(threw, 'wrong key should throw');
+
 console.log('crypto test: OK');

@@ -39,6 +39,12 @@
         <p id="lock-error" class="lock-error hidden" role="alert"></p>
         <button id="lock-button" type="submit" class="btn primary lock-button">Unlock</button>
       </form>
+      <div id="touchid-row" class="touchid-row hidden">
+        <div class="lock-divider"><span>or</span></div>
+        <button id="lock-touchid" type="button" class="btn secondary touchid-button">
+          <span data-icon="fingerprint"></span><span>Unlock with Touch&nbsp;ID</span>
+        </button>
+      </div>
     </div>
     <p class="lock-foot">100% local &middot; your data never leaves this Mac</p>
   </div>
@@ -118,6 +124,15 @@
         <div class="segmented auto-lock" id="auto-lock-seg"></div>
       </div>
 
+      <div class="pop-block" id="touchid-block">
+        <div class="pop-label">Touch ID</div>
+        <div class="switch-row">
+          <span class="switch-label">Unlock with Touch ID</span>
+          <button class="switch" id="touchid-switch" role="switch" aria-checked="false" aria-label="Unlock with Touch ID"></button>
+        </div>
+        <p id="touchid-note" class="pop-note hidden"></p>
+      </div>
+
       <div class="pop-title pop-sub">Change Master Password</div>
       <input id="cp-old" class="text-input pop-input" type="password" placeholder="Current password" autocomplete="off" />
       <input id="cp-new" class="text-input pop-input" type="password" placeholder="New password (8+ characters)" autocomplete="off" />
@@ -128,7 +143,7 @@
       <button id="pop-export" class="btn secondary pop-btn">Export Backup&hellip;</button>
       <button id="pop-import" class="btn secondary pop-btn">Import Backup&hellip;</button>
 
-      <p class="pop-about">Vault 1.0 &middot; Fully local &middot; AES-256-GCM</p>
+      <p class="pop-about">Vault 1.1 &middot; Fully local &middot; AES-256-GCM</p>
     </div>
 
     <!-- Toast -->

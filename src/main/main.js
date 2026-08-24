@@ -1,6 +1,7 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, clipboard, Menu, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, Menu, powerMonitor, systemPreferences, safeStorage } = require('electron');
 const path = require('path');
+const nodeCrypto = require('crypto');
 const crypto = require('./crypto');
 const Store = require('./store');
 
@@ -19,7 +20,10 @@ let win = null;
 let store = null;
 
 // Plaintext vault lives only in main-process memory while unlocked.
-let session = null; // { password, vault }
+// `key` is the derived 32-byte encryption key; `salt` is the vault's KDF
+// salt (kept so password-based unlocks keep working after key-based saves).
+// `password` is null when the vault was unlocked with Touch ID.
+let session = null; // { password, key, salt, vault }
 
 let lastActivity = Date.now();
 let autoLockTimer = null;
@@ -50,6 +54,46 @@ function isUnlocked() {
 
 function requireUnlocked() {
   if (!isUnlocked()) throw new Error('Vault is locked');
+}
+
+/* ---------------- Touch ID unlock material ---------------- */
+
+// Hardware check only — must not touch the Keychain (accessing it can block
+// the main process on an interactive authorization prompt).
+function canUseTouchId() {
+  try {
+    return !!systemPreferences.canPromptTouchID();
+  } catch (_) {
+    return false;
+  }
+}
+
+// Park the session key, OS-keychain-encrypted, so Touch ID can unlock.
+// The first call may show a macOS Keychain authorization prompt, which is
+// why this runs only from an explicit user action (toggling the setting on).
+// Returns true when a fresh key was stored, false on any failure.
+function storeTouchIdKey() {
+  if (!session || !session.key) return false;
+  try {
+    const blob = safeStorage.encryptString(session.key.toString('hex'));
+    return store.writeTouchIdKey(blob.toString('base64'));
+  } catch (_) {
+    return false;
+  }
+}
+
+function clearTouchIdKey() {
+  store.deleteTouchIdKey();
+}
+
+// After any password-based unlock/setup/import/password change, keep the
+// stored Touch ID key in sync with the current vault key.
+function syncTouchIdKey() {
+  if (settings.touchIdEnabled) {
+    if (!storeTouchIdKey()) clearTouchIdKey();
+  } else {
+    clearTouchIdKey();
+  }
 }
 
 function startAutoLockTimer() {
@@ -187,7 +231,9 @@ function registerIpc() {
     const vault = emptyVault();
     const payload = crypto.encryptVault(JSON.stringify(vault), password);
     store.writeRaw(JSON.stringify(payload));
-    session = { password, vault };
+    const key = crypto.deriveKey(password, Buffer.from(payload.salt, 'base64'));
+    session = { password, key, salt: payload.salt, vault };
+    syncTouchIdKey();
     touch();
     startAutoLockTimer();
     return { ok: true };
@@ -202,9 +248,11 @@ function registerIpc() {
     } catch (_) {
       throw new Error('Vault file is corrupted');
     }
+    let key;
     let plain;
     try {
-      plain = crypto.decryptVault(payload, password);
+      key = crypto.deriveKey(password, Buffer.from(payload.salt, 'base64'));
+      plain = crypto.decryptVaultWithKey(payload, key);
     } catch (_) {
       throw new Error('Incorrect master password');
     }
@@ -214,7 +262,49 @@ function registerIpc() {
     } catch (_) {
       throw new Error('Vault file is corrupted');
     }
-    session = { password, vault };
+    session = { password, key, salt: payload.salt, vault };
+    syncTouchIdKey();
+    touch();
+    startAutoLockTimer();
+    return { ok: true, vault };
+  });
+
+  ipcMain.handle('vault:unlockTouchId', async () => {
+    if (!settings.touchIdEnabled) throw new Error('Touch ID unlock is turned off');
+    if (!canUseTouchId()) throw new Error('Touch ID is not available on this Mac');
+    const stored = store.readTouchIdKey();
+    if (!stored) {
+      throw new Error('Unlock once with your password to enable Touch ID');
+    }
+    let ok;
+    if (process.env.VAULT_SMOKE_TOUCHID) {
+      // Automated smoke test only: skip the real biometric prompt.
+      ok = true;
+    } else {
+      try {
+        ok = await systemPreferences.promptTouchID('Unlock Vault');
+      } catch (_) {
+        throw new Error('Touch ID was cancelled');
+      }
+    }
+    if (!ok) throw new Error('Fingerprint not recognized — try again');
+    let key;
+    try {
+      key = Buffer.from(safeStorage.decryptString(Buffer.from(stored, 'base64')), 'hex');
+    } catch (_) {
+      clearTouchIdKey();
+      throw new Error('Touch ID unlock is unavailable — unlock with your password');
+    }
+    let payload;
+    let vault;
+    try {
+      payload = JSON.parse(store.readRaw());
+      vault = JSON.parse(crypto.decryptVaultWithKey(payload, key));
+    } catch (_) {
+      clearTouchIdKey();
+      throw new Error('Touch ID unlock is out of date — unlock with your password once');
+    }
+    session = { password: null, key, salt: payload.salt, vault };
     touch();
     startAutoLockTimer();
     return { ok: true, vault };
@@ -231,26 +321,56 @@ function registerIpc() {
     const vault = JSON.parse(vaultJson);
     session.vault = vault;
     vault.meta = { ...vault.meta, updatedAt: Date.now() };
-    const payload = crypto.encryptVault(JSON.stringify(vault), session.password);
+    const payload = crypto.encryptVaultWithKey(
+      JSON.stringify(vault),
+      session.key,
+      Buffer.from(session.salt, 'base64')
+    );
     store.writeRaw(JSON.stringify(payload));
     return { ok: true };
   });
 
   ipcMain.handle('vault:changePassword', (_e, oldPassword, newPassword) => {
     requireUnlocked();
-    if (oldPassword !== session.password) throw new Error('Current password is incorrect');
+    if (typeof oldPassword !== 'string' || !oldPassword) {
+      throw new Error('Enter your current password');
+    }
     if (typeof newPassword !== 'string' || newPassword.length < 8) {
       throw new Error('New password must be at least 8 characters');
+    }
+    // Verify the current password against the vault's salt, so this also
+    // works when the vault was unlocked with Touch ID.
+    let currentPayload;
+    try {
+      currentPayload = JSON.parse(store.readRaw());
+    } catch (_) {
+      throw new Error('Vault file is corrupted');
+    }
+    let oldKey;
+    try {
+      oldKey = crypto.deriveKey(oldPassword, Buffer.from(currentPayload.salt, 'base64'));
+    } catch (_) {
+      throw new Error('Current password is incorrect');
+    }
+    if (!nodeCrypto.timingSafeEqual(oldKey, session.key)) {
+      throw new Error('Current password is incorrect');
     }
     const payload = crypto.encryptVault(JSON.stringify(session.vault), newPassword);
     store.writeRaw(JSON.stringify(payload));
     session.password = newPassword;
+    session.key = crypto.deriveKey(newPassword, Buffer.from(payload.salt, 'base64'));
+    session.salt = payload.salt;
+    syncTouchIdKey();
     return { ok: true };
   });
 
   ipcMain.handle('vault:export', async () => {
     requireUnlocked();
-    const payload = crypto.encryptVault(JSON.stringify(session.vault), session.password);
+    const payload = crypto.encryptVaultWithKey(
+      JSON.stringify(session.vault),
+      session.key,
+      Buffer.from(session.salt, 'base64')
+    );
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
       title: 'Export Vault Backup',
       defaultPath: path.join(app.getPath('documents'), `Vault Backup ${dateStamp()}.vault`),
@@ -303,9 +423,11 @@ function registerIpc() {
 
   ipcMain.handle('vault:importWithPassword', (_e, password) => {
     if (!importedPayload) throw new Error('Choose a backup file first');
+    let key;
     let plain;
     try {
-      plain = crypto.decryptVault(importedPayload, password);
+      key = crypto.deriveKey(password, Buffer.from(importedPayload.salt, 'base64'));
+      plain = crypto.decryptVaultWithKey(importedPayload, key);
     } catch (_) {
       throw new Error('Incorrect password for this backup');
     }
@@ -317,7 +439,8 @@ function registerIpc() {
     }
     store.writeRaw(JSON.stringify(importedPayload));
     importedPayload = null;
-    session = { password, vault };
+    session = { password, key, salt: importedPayload.salt, vault };
+    syncTouchIdKey();
     touch();
     startAutoLockTimer();
     return { ok: true, vault };
@@ -329,8 +452,32 @@ function registerIpc() {
   });
 
   ipcMain.handle('app:getSettings', () => settings);
+  ipcMain.handle('app:touchIdStatus', () => ({
+    available: canUseTouchId(),
+    enabled: !!settings.touchIdEnabled,
+    ready: store.hasTouchIdKey(),
+  }));
   ipcMain.handle('app:setSettings', (_e, patch) => {
-    settings = { ...settings, ...patch };
+    if (!patch || typeof patch !== 'object') throw new Error('Bad settings');
+    if ('touchIdEnabled' in patch) {
+      const wasEnabled = !!settings.touchIdEnabled;
+      const wantEnabled = !!patch.touchIdEnabled;
+      if (wantEnabled && !wasEnabled) {
+        // Turning Touch ID on: park the current key in the OS keychain.
+        // macOS may ask for Keychain authorization here.
+        if (!session || !session.key) throw new Error('Unlock the vault first');
+        if (!canUseTouchId()) throw new Error('Touch ID is not available on this Mac');
+        if (!storeTouchIdKey()) {
+          clearTouchIdKey();
+          throw new Error('Could not enable Touch ID — macOS Keychain access was denied');
+        }
+      } else if (!wantEnabled) {
+        clearTouchIdKey();
+      }
+      settings = { ...settings, ...patch, touchIdEnabled: wantEnabled };
+    } else {
+      settings = { ...settings, ...patch };
+    }
     settings.autoLockMinutes = Math.max(0, Number(settings.autoLockMinutes) || 0);
     persistSettings();
     startAutoLockTimer();
@@ -369,8 +516,9 @@ app.whenReady().then(() => {
   });
 });
 
+// Closing the window fully quits the app (including on macOS).
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
 });
 
 app.on('before-quit', () => {

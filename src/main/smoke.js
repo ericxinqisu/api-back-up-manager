@@ -110,6 +110,39 @@ async function run(win) {
     await sleep(500);
     const locked = await js(`!document.querySelector('#screen-lock').classList.contains('hidden')`);
     check('lock returns to lock screen', locked);
+
+    // 7b. Touch ID round trip (requires VAULT_SMOKE_TOUCHID=1 + a usable
+    // macOS Keychain; the biometric prompt itself is skipped by the flag).
+    if (process.env.VAULT_SMOKE_TOUCHID) {
+      await js(`(() => {
+        document.querySelector('#lock-password').value = 'smoke-test-password';
+        document.querySelector('#lock-form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      })()`);
+      await sleep(1000);
+      const tid1 = await js(`window.vaultAPI.touchIdStatus()`);
+      check('touch id hardware available', tid1.available === true);
+      await js(`window.vaultAPI.setSettings({ touchIdEnabled: true })`);
+      const tid2 = await js(`window.vaultAPI.touchIdStatus()`);
+      check('touch id key parked in keychain', tid2.enabled === true && tid2.ready === true);
+      await js(`document.querySelector('#btn-lock').click()`);
+      await sleep(500);
+      const rowShown = await js(`!document.querySelector('#touchid-row').classList.contains('hidden')`);
+      check('touch id row visible when enabled', rowShown);
+      const res = await js(`window.vaultAPI.unlockWithTouchId().then((r) => ({ ok: true, items: r.vault && r.vault.items.length }), (e) => ({ ok: false, msg: e.message }))`);
+      check('touch id unlock restores vault', res.ok === true && res.items === 2);
+      // Disable Touch ID again and re-lock from the renderer so the UI state
+      // (hidden Touch ID row) matches the settings for the checks below.
+      await js(`window.vaultAPI.setSettings({ touchIdEnabled: false }).then(() => lockNow(true))`);
+      await sleep(500);
+    }
+
+    const touchIdRowHidden = await js(`document.querySelector('#touchid-row').classList.contains('hidden')`);
+    check('touch id row hidden while disabled', touchIdRowHidden);
+    const touchIdErr = await js(`window.vaultAPI.unlockWithTouchId().then(() => 'ok', (e) => e.message)`);
+    check(
+      'touch id unlock refused while disabled',
+      typeof touchIdErr === 'string' && touchIdErr.includes('Touch ID unlock is turned off')
+    );
     await js(`(() => {
       document.querySelector('#lock-password').value = 'smoke-test-password';
       document.querySelector('#lock-form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
@@ -120,7 +153,13 @@ async function run(win) {
 
     const failed = results.filter((r) => !r.ok);
     console.log(`[smoke] ${results.length - failed.length}/${results.length} passed`);
-    app.exit(failed.length ? 1 : 0);
+    if (failed.length) {
+      app.exit(1);
+    }
+    // Success path: close the window instead of exiting. The process must
+    // then quit on its own via window-all-closed -> app.quit(); if it
+    // doesn't, the smoke run hangs and the caller times out (a failure).
+    win.close();
   } catch (err) {
     console.error('[smoke] ERROR', err);
     app.exit(2);

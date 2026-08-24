@@ -37,6 +37,8 @@ const ICONS = {
   restore: '<path d="M4 10a8 8 0 1 1 2 6.5"></path><path d="M4 5v5h5"></path>',
   checkmark: '<path d="m5 12.5 4.5 4.5L19 7.5"></path>',
   chevron: '<path d="m9 6 6 6-6 6"></path>',
+  fingerprint:
+    '<path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"></path><path d="M14 13.12c0 2.38 0 6.38-1 8.88"></path><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"></path><path d="M2 12a10 10 0 0 1 18-6"></path><path d="M2 16h.01"></path><path d="M21.8 16c.2-2 .131-5.354 0-6"></path><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"></path><path d="M8.65 22c.21-.66.45-1.32.57-2"></path><path d="M9 6.8a6 6 0 0 1 9 5.2v2"></path>',
 };
 
 function icon(name, size) {
@@ -71,6 +73,7 @@ const AUTO_LOCK_OPTIONS = [
 ];
 
 let settings = { autoLockMinutes: 5 };
+let touchId = { available: false, enabled: false, ready: false };
 let pendingImport = null; // reserved
 let confirmResolver = null;
 let activitySentAt = 0;
@@ -213,8 +216,38 @@ async function boot() {
       setLockMode('setup');
       showScreen('lock');
     }
+    await refreshTouchId();
   } catch (err) {
     showLockError(message(err));
+  }
+}
+
+async function refreshTouchId() {
+  try {
+    touchId = await api.touchIdStatus();
+  } catch (_) {
+    touchId = { available: false, enabled: false, ready: false };
+  }
+  updateTouchIdButton();
+}
+
+function updateTouchIdButton() {
+  const show =
+    state.mode === 'lock' && touchId.available && touchId.enabled && touchId.ready;
+  $('#touchid-row').classList.toggle('hidden', !show);
+}
+
+async function handleTouchIdUnlock() {
+  const btn = $('#lock-touchid');
+  btn.disabled = true;
+  try {
+    const res = await api.unlockWithTouchId();
+    enterVault(res.vault);
+    toast('Unlocked with Touch ID');
+  } catch (err) {
+    showLockError(message(err));
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -247,6 +280,7 @@ async function handleUnlock(e) {
 }
 
 function enterVault(vault) {
+  state.mode = 'unlocked';
   state.vault = vault;
   state.filter = 'all';
   state.search = '';
@@ -256,6 +290,7 @@ function enterVault(vault) {
   showScreen('main');
   renderAll();
   $('#search').focus();
+  refreshTouchId().catch(() => {});
 }
 
 async function lockNow(quiet) {
@@ -272,6 +307,7 @@ async function lockNow(quiet) {
   if (!quiet) toast('Vault locked');
   setLockMode('lock');
   showScreen('lock');
+  refreshTouchId().catch(() => {});
 }
 
 /* ---------------- Rendering ---------------- */
@@ -878,11 +914,45 @@ function renderAutoLockSeg() {
   });
 }
 
-function openPopover() {
+function renderTouchIdSeg() {
+  const block = $('#touchid-block');
+  const sw = $('#touchid-switch');
+  if (!touchId.available) {
+    block.classList.add('hidden');
+    return;
+  }
+  block.classList.remove('hidden');
+  const on = !!settings.touchIdEnabled;
+  sw.classList.toggle('on', on);
+  sw.setAttribute('aria-checked', String(on));
+}
+
+async function toggleTouchId() {
+  const sw = $('#touchid-switch');
+  const note = $('#touchid-note');
+  sw.disabled = true;
+  note.classList.add('hidden');
+  try {
+    settings = await api.setSettings({ touchIdEnabled: !settings.touchIdEnabled });
+    await refreshTouchId();
+    toast(settings.touchIdEnabled ? 'Touch ID unlock enabled' : 'Touch ID unlock disabled');
+  } catch (err) {
+    note.textContent = message(err);
+    note.classList.remove('hidden');
+  } finally {
+    sw.disabled = false;
+    renderTouchIdSeg();
+  }
+}
+
+async function openPopover() {
+  await refreshTouchId();
   renderAutoLockSeg();
+  renderTouchIdSeg();
   $('#cp-old').value = '';
   $('#cp-new').value = '';
   $('#cp-error').classList.add('hidden');
+  $('#touchid-note').classList.add('hidden');
   $('#settings-pop').classList.remove('hidden');
 }
 
@@ -1042,6 +1112,7 @@ function pingActivity() {
 function bindEvents() {
   // Lock screen
   $('#lock-form').addEventListener('submit', handleUnlock);
+  $('#lock-touchid').addEventListener('click', handleTouchIdUnlock);
 
   // Search
   $('#search').addEventListener('input', (e) => {
@@ -1100,6 +1171,7 @@ function bindEvents() {
   $('#cp-save').addEventListener('click', changePassword);
   $('#pop-export').addEventListener('click', doExport);
   $('#pop-import').addEventListener('click', doImport);
+  $('#touchid-switch').addEventListener('click', toggleTouchId);
 
   // Editor
   $('#editor-cancel').addEventListener('click', closeEditor);

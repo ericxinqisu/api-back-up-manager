@@ -1,7 +1,7 @@
 {
   "name": "vault-app",
   "productName": "Vault",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A fully-local API key & backup code manager with Apple-style design",
   "main": "src/main/main.js",
   "author": "Vault",

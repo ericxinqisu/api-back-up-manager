@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('vaultAPI', {
   status: () => ipcRenderer.invoke('vault:status'),
   setup: (password) => ipcRenderer.invoke('vault:setup', password),
   unlock: (password) => ipcRenderer.invoke('vault:unlock', password),
+  unlockWithTouchId: () => ipcRenderer.invoke('vault:unlockTouchId'),
   lock: () => ipcRenderer.invoke('vault:lock'),
   save: (vaultJson) => ipcRenderer.invoke('vault:save', vaultJson),
   changePassword: (oldPassword, newPassword) =>
@@ -18,6 +19,7 @@ contextBridge.exposeInMainWorld('vaultAPI', {
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   getSettings: () => ipcRenderer.invoke('app:getSettings'),
   setSettings: (patch) => ipcRenderer.invoke('app:setSettings', patch),
+  touchIdStatus: () => ipcRenderer.invoke('app:touchIdStatus'),
   activity: () => ipcRenderer.invoke('activity'),
 
   // Events from main

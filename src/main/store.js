@@ -11,6 +11,7 @@ class Store {
     this.file = path.join(dir, 'vault.vlt');
     this.backupFile = path.join(dir, 'vault.vlt.bak');
     this.settingsFile = path.join(dir, 'settings.json');
+    this.touchIdFile = path.join(dir, 'touchid.vlt');
   }
 
   exists() {
@@ -50,6 +51,42 @@ class Store {
       fs.writeFileSync(this.settingsFile, JSON.stringify(obj, null, 2), 'utf8');
     } catch (_) {
       /* non-fatal */
+    }
+  }
+
+  // ---- Touch ID unlock material ------------------------------------
+  // Stores the vault encryption key, encrypted by the OS keychain via
+  // Electron safeStorage. Only readable after a successful Touch ID prompt.
+
+  hasTouchIdKey() {
+    return fs.existsSync(this.touchIdFile);
+  }
+
+  readTouchIdKey() {
+    try {
+      return fs.readFileSync(this.touchIdFile, 'utf8');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  writeTouchIdKey(data) {
+    try {
+      fs.mkdirSync(path.dirname(this.touchIdFile), { recursive: true });
+      const tmp = this.touchIdFile + '.tmp';
+      fs.writeFileSync(tmp, data, 'utf8');
+      fs.renameSync(tmp, this.touchIdFile);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  deleteTouchIdKey() {
+    try {
+      fs.unlinkSync(this.touchIdFile);
+    } catch (_) {
+      /* already gone */
     }
   }
 }
