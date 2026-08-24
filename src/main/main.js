@@ -283,11 +283,21 @@ function registerIpc() {
     } else {
       try {
         ok = await systemPreferences.promptTouchID('Unlock Vault');
-      } catch (_) {
-        throw new Error('Touch ID was cancelled');
+      } catch (err) {
+        const detail = String((err && err.message) || err || '').toLowerCase();
+        if (detail.includes('locked out') || detail.includes('lockout')) {
+          throw new Error(
+            'Touch ID is locked out after repeated failed attempts — enter your Mac password when the system asks, then try again'
+          );
+        }
+        throw new Error('Touch ID was cancelled — unlock with your password');
       }
     }
-    if (!ok) throw new Error('Fingerprint not recognized — try again');
+    if (!ok) {
+      throw new Error(
+        'Fingerprint not recognized — try again, or unlock with your password below'
+      );
+    }
     let key;
     try {
       key = Buffer.from(safeStorage.decryptString(Buffer.from(stored, 'base64')), 'hex');

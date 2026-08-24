@@ -171,7 +171,10 @@ async function copyText(text, label = 'Copied') {
 }
 
 function message(err) {
-  return err && err.message ? err.message : String(err);
+  let m = err && err.message ? err.message : String(err);
+  // Strip Electron's IPC wrapper: "Error invoking remote method 'x': Error: …"
+  m = m.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, '');
+  return m;
 }
 
 /* ---------------- Lock / unlock flow ---------------- */
