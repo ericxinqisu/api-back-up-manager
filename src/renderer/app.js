@@ -220,9 +220,25 @@ async function boot() {
       showScreen('lock');
     }
     await refreshTouchId();
+    // Touch ID is the default login method: when the lock screen appears
+    // and Touch ID is ready, prompt for the fingerprint automatically.
+    autoTouchIdIfReady();
   } catch (err) {
     showLockError(message(err));
   }
+}
+
+// Prompt for Touch ID automatically (only when the lock screen is showing
+// and Touch ID is configured). A short delay lets the window settle first;
+// the re-check keeps the prompt from firing if the user already unlocked
+// with the password in the meantime.
+function autoTouchIdIfReady() {
+  if (state.mode !== 'lock') return;
+  if (!touchId.available || !touchId.enabled || !touchId.ready) return;
+  setTimeout(() => {
+    if (state.mode !== 'lock') return;
+    handleTouchIdUnlock();
+  }, 350);
 }
 
 async function refreshTouchId() {
@@ -238,6 +254,23 @@ function updateTouchIdButton() {
   const show =
     state.mode === 'lock' && touchId.available && touchId.enabled && touchId.ready;
   $('#touchid-row').classList.toggle('hidden', !show);
+  // Touch ID is the default login method — when it's ready, make it the
+  // primary action and demote the password button to the fallback.
+  const tid = $('#lock-touchid');
+  const pwBtn = $('#lock-button');
+  if (show) {
+    $('#lock-subtitle').textContent = 'Scan your fingerprint to unlock';
+    tid.classList.remove('secondary');
+    tid.classList.add('primary');
+    pwBtn.classList.remove('primary');
+    pwBtn.classList.add('secondary');
+  } else if (state.mode === 'lock') {
+    $('#lock-subtitle').textContent = 'Enter your master password to continue';
+    tid.classList.remove('primary');
+    tid.classList.add('secondary');
+    pwBtn.classList.remove('secondary');
+    pwBtn.classList.add('primary');
+  }
 }
 
 async function handleTouchIdUnlock() {
@@ -257,7 +290,14 @@ async function handleTouchIdUnlock() {
 async function handleUnlock(e) {
   e.preventDefault();
   const pw = $('#lock-password').value;
-  if (!pw) return showLockError('Enter your master password');
+  if (!pw) {
+    // Touch ID is the default login method: with an empty password field,
+    // Enter triggers the fingerprint scan instead of an error.
+    if (state.mode === 'lock' && touchId.available && touchId.enabled && touchId.ready) {
+      return handleTouchIdUnlock();
+    }
+    return showLockError('Enter your master password');
+  }
   const isSetup = state.mode === 'setup';
   if (isSetup) {
     if (pw.length < 8) return showLockError('Master password must be at least 8 characters');
