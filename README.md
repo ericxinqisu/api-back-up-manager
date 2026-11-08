@@ -20,26 +20,39 @@ npm install
 npm start
 ```
 
-## Use the built app
+## Download
 
-- `release/Vault-1.1.2-arm64.dmg` — double-click to open, drag Vault into `/Applications`.
-- `release/Vault-1.1.2-arm64-mac.zip` — distributable archive (unzip, drag to Applications).
-- `release/mac-arm64/Vault.app` — the unpacked app, ready to drag into `/Applications`.
+Every version is published on the [Releases page](https://github.com/ericxinqisu/api-back-up-manager/releases).
+Pick a version and download the `.dmg` (drag Vault into `/Applications`) or the `.zip`.
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
 ## Build the app
 
 ```bash
-npm run dist:mac   # builds Vault.dmg + zip into release/
+npm run dist:mac   # builds Vault.dmg + zip into release/ (git-ignored)
 npm run pack       # just the unpacked .app (fast)
 ```
 
 > The DMG and zip are ad-hoc/Apple-Development signed but not notarized, so the first launch of a copied build may need a right-click → Open (or `xattr -dr com.apple.quarantine`). Building on this Mac for local use works directly.
+
+## Project layout
+
+```
+src/main/       Electron main process (window, IPC, crypto, store)
+src/renderer/   UI (HTML / CSS / JS)
+src/preload.js  Context-isolated bridge
+tools/          Dev-only utilities (smoke test, screenshots, icon) - not packaged
+test/           Unit tests (npm test)
+build/          App icon sources
+.github/        CI + release workflow
+```
 
 ## Dev utilities
 
 ```bash
 npm run smoke   # automated UI test (VAULT_SMOKE=1, throwaway data)
 npm run shots   # captures UI screenshots into ./shots (light + dark)
+npm test         # unit tests for the crypto module
 npm run icon    # regenerates build/icon.icns from build/icon.html
 ```
 

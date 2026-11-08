@@ -195,19 +195,19 @@ function createWindow() {
     });
     win.webContents.once('did-finish-load', () => {
       if (process.env.VAULT_SMOKE) {
-        const smoke = require('./smoke');
+        const smoke = require('../../tools/smoke');
         smoke.run(win);
       } else if (process.env.VAULT_SHOT) {
-        const screenshot = require('./screenshot');
+        const screenshot = require('../../tools/screenshot');
         screenshot.run(win);
       } else if (process.env.VAULT_CHECK) {
-        const designcheck = require('./designcheck');
+        const designcheck = require('../../tools/designcheck');
         designcheck.run(win);
       }
     });
   } else if (process.env.VAULT_ICON) {
     win.webContents.once('did-finish-load', () => {
-      const icon = require('./icon');
+      const icon = require('../../tools/icon');
       icon.run();
     });
   }
